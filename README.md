@@ -1,4 +1,4 @@
-# Learning_Path of Data Analysis
+# Learning Path of Data Analysis
 ## 学习清单
 1.Udacity数据分析（进阶） -->2018.04 进行中
   - 数据挖掘 ； 数据评估及清洗

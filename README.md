@@ -1,6 +1,6 @@
 # Learning Path of Data Analysis
 ## 学习清单
-1.Udacity数据分析（进阶） -->2018.04 进行中
+1.Udacity数据分析（进阶） -->2018.07 已完成([证书](https://confirm.udacity.com/KFHYJG6D))
   - 数据挖掘 ； 数据评估及清洗
   
 2.Udacity数据分析（入门） -->2018.04 已完成（[证书](https://confirm.udacity.com/LGUKXDDT)，笔记整理中）

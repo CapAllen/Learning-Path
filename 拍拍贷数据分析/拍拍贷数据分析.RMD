@@ -1,0 +1,620 @@
+拍拍贷用户借款数据分析
+========================================================
+## 数据集介绍
+
+此数据集来自于拍拍贷互金训练营，提供的数据来自拍拍贷真实业务数据，从2015-01-01到2017-01-30的所有信用标的10%sample样本。数据集包含LC.csv（标的特征表数据）和LP.csv（标的还款计划和还款记录表）数据。在本项目中，选用了LC.csv数据集进行分析。
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# 加载你最终使用的所有组件
+# 在这个代码块的分析中。
+
+# 注意，在这个代码块中，将参数 "echo" 设为假。
+# This prevents the code from displaying in the knitted HTML output.这可以避免代码混入 HTML 输出显示。
+# 应当在文件中，对所有代码块设为 echo=FALSE 。
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(recharts)
+```
+
+```{r echo=FALSE, Load_the_Data}
+# 加载数据
+lc <- read.csv('LC.csv',fileEncoding = 'utf8')
+```
+## 观察数据
+```{r echo=FALSE}
+dim(lc)
+str(lc)
+summary(lc)
+```
+所选数据集由21个变量和328553个观察结果，其中变量包括11个类别变量和10个数值变量。  
+在p2p企业中，用户还款逾期会对公司的资金链产生冲击，欠款金额越高，逾期时间越久，冲击就会越大，为了减少这种冲击，我们应该尽可能的降低逾期事件的概率。    所以在此项目中，我们的目标是通过对现有数据的分析及可视化，指出具有哪些特征的标容易逾期，从而引导借贷公司对申请借贷的用户特征和借款需求进行评估和筛选，对逾期可能性较高的用户予以不借款或降低借款金额或提高借款利息，来降低风险；对逾期可能性较低的用户予以提高借款金额或降低借款利息等措施，来提高收益。
+
+如果只比较不同用户的`历史逾期还款期数`的话，会因为总的借款期数不同而产生干扰，为此，我们创建一个新的数据变量`逾期比`来作为比较，`逾期比` = `历史逾期还款期数` / (`历史正常还款期数` + `历史逾期还款期数`)，`逾期比`的范围在0到1之间，逾期比越接近于1，表示该用户越容易逾期。
+
+```{r echo=FALSE,lc$逾期比}
+#添加变量‘逾期比’
+lc$逾期比 <- lc$历史逾期还款期数 / (lc$历史正常还款期数 + lc$历史逾期还款期数)
+```
+
+## 单变量绘图
+### 逾期比的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center' ,Univariate_Plots}
+ggplot(aes(x = 逾期比),data = subset(lc,!is.na(lc$逾期比))) +
+  ylim(0,3000) +
+  geom_histogram(binwidth = 0.01,color = I('white')) +
+  labs(title="逾期比分布图", x="逾期比", y="用户数量")+
+  theme(plot.title = element_text(hjust = 0.5,size = 18)) 
+
+summary(subset(lc,!is.na(lc$逾期比))$逾期比)
+```
+由`逾期比分布图`中可以看出，大部分人的逾期比在0.25以下，但是在0.33,0.5,0.67和1处均出现了尖峰值，这说明具有高逾期比的用户数量并不少；从summary中可以看出，用户的平均逾期比为0.04，也就是平均每100期还款中，就有约4期是逾期还款的。
+
+### 借款金额的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center' ,借款金额}
+#其他变量的分布情况
+ggplot(aes(x = 借款金额),data = lc) + 
+  geom_histogram(binwidth = 1000) +
+  labs(title = '借款金额分布图',x = '借款金额/元',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+#将x轴转为对数坐标
+ggplot(aes(x = 借款金额),data = lc) + 
+  scale_x_log10(breaks = c(0,1000,2000,4000,8000,16000)) +
+  geom_histogram(binwidth = 0.1,color = I('white')) +
+  labs(title = '借款金额分布图(log10)',x = '借款金额/元',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+summary(lc$借款金额)
+```
+
+由于用户的借款金额跨度比较大，且有着较低借款金额的用户数量远多于较高借款金额的用户，为方便查看，我们将x轴转为对数坐标。从图中可以看出，借款金额主要集中在2000-8000元之间；从summary中可以看出，借款金额的均值为4424元，最高值高达50万元。  
+为方便后续分析比较，我们对借款金额进行分组，如下所示：  
+ (0,2000]  
+ (2000,5000]  
+ (5000,8000]  
+ (8000,500000]  
+```{r echo=FALSE,warning=FALSE}
+#创建借款金额bucket变量
+lc$借款金额.bucket <- cut(lc$借款金额,c(0,2000,5000,8000,500000))
+```
+
+```{r echo=FALSE,warning=FALSE,fig.align='center' }
+ggplot(aes(x = lc$借款金额.bucket),data = lc) +
+  geom_bar() +
+  labs(title = '借款金额分布图',x = '借款金额/元',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+```
+从图中可以看出，2000-5000元的借款金额最为普遍，其次是2000元以下和5000-8000元，8000元以上的借款金额最少。 
+
+### 借款期限的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center' }
+ggplot(aes(x = 借款期限),data = lc) +
+  geom_bar() +
+  labs(title = '借款期限分布图',x = '借款期限/个月',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+table(lc$借款期限)
+```
+从图中可以看出，绝大部分人都选择了12个月（一年）分期或6个月（半年）分期还款的方式。
+
+### 借款利率的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 借款利率),data = lc) + 
+  geom_histogram(binwidth = 1,color = I('white')) +
+  labs(title = '借款利率分布图',x = '借款利率/%',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+```
+从图中可以看出，借款利率（年化）大部分都在20%及以上。
+
+### 用户初始评级的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 初始评级),data = lc) +
+  geom_bar() +
+  labs(title = '用户初始评级分布图',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+table(lc$初始评级)
+```
+从图中可以看出，用户的初始评级集中在C和D等级。
+
+### 借款类型的分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 借款类型),data = lc) +
+  geom_bar() +
+  labs(title = '借款类型分布图',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+table(lc$借款类型)
+```
+从图中可以看出，借款类型集中在APP闪电型和普通型，其他型稍次之，电商型最少。
+
+### 用户是否首标分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 是否首标),data = lc) +
+  geom_bar() +
+  labs(title = '用户是否首标分布图',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+table(lc$是否首标)
+```
+从图中可以看出，用户中大约包含3/4的老用户（非首标）和1/4的新用户（首标）。
+
+### 用户年龄分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 年龄),data = lc) +
+  geom_histogram(binwidth = 1,color = I('white')) +
+  labs(title = '用户年龄分布图',x = '年龄/岁', y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+summary(lc$年龄)
+```
+从图中可以看出，用户年龄集中在21-34岁之间，也就是1981-1994年出生的80后和95前人群；从summary中可以看出，用户的平均年龄为29岁，最年轻的为17岁，最年老的为56岁。
+
+### 用户性别分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 性别),data = lc) +
+  geom_bar() +
+  labs(title = '用户性别分布图',y = '用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+table(lc$性别)
+```
+从图中可以看出，男性用户占到了2/3，女性用户占到了1/3.
+
+### 用户身份认证情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+p1 <- ggplot(aes(x = 手机认证),data = lc) +
+  geom_bar()
+p2 <- ggplot(aes(x = 户口认证),data = lc) +
+  geom_bar()
+p3 <- ggplot(aes(x = 视频认证),data = lc) +
+  geom_bar()
+p4 <- ggplot(aes(x = 学历认证),data = lc) +
+  geom_bar()
+p5 <- ggplot(aes(x = 征信认证),data = lc) +
+  geom_bar()
+p6 <- ggplot(aes(x = 淘宝认证),data = lc) +
+  geom_bar()
+
+grid.arrange(p1,p2,p3,p4,p5,p6,ncol = 2 , top = '用户身份认证情况汇总图') 
+```
+从图中可以看出，已完成手机认证和学历认证的用户占比均为1/3左右，但是其余几项中，成功认证的用户非常非常少。  
+
+为方便之后进行分析比较，现将几项认证合并为一个变量`认证情况`，若有成功认证的项则加1，若未成功认证则不变。
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+#创建项目名列表
+columns <- list('手机认证','户口认证','视频认证','学历认证','征信认证','淘宝认证')
+#将各列中‘成功认证’与‘未成功认证’替换为1和0表示
+lc$手机认证 <- ifelse(lc$手机认证 == '成功认证',1,0)
+lc$户口认证 <- ifelse(lc$户口认证 == '成功认证',1,0)
+lc$视频认证 <- ifelse(lc$视频认证 == '成功认证',1,0)
+lc$学历认证 <- ifelse(lc$学历认证 == '成功认证',1,0)
+lc$征信认证 <- ifelse(lc$征信认证 == '成功认证',1,0)
+lc$淘宝认证 <- ifelse(lc$淘宝认证 == '成功认证',1,0)
+#各列相加即得新列`认证情况`
+lc$认证情况 <- lc$手机认证 + lc$户口认证 + lc$视频认证 +
+  lc$学历认证 + lc$征信认证 + lc$淘宝认证
+#绘制认证情况分布图
+ggplot(aes(x = 认证情况),data = lc) +
+  scale_x_continuous(breaks = seq(0,6,1)) +
+  geom_bar() +
+  labs(title = '用户认证情况分布图',x = '项目认证数量', y ='用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+```
+从上图中可以看出，大部分用户的认证种类在1项及以下，有两项以上认证的都很少。
+
+### 历史成功借款次数分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 历史成功借款次数),data = lc) +
+  geom_histogram(binwidth = 10) +
+  labs(title = '历史情况分布图',x = '历史成功借款次数', y ='用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+#将x轴转为对数坐标
+ggplot(aes(x = 历史成功借款次数),data = lc) +
+  scale_x_log10() +
+  geom_histogram(binwidth = 0.05) +
+  labs(title = '历史情况分布图(log10)',x = '历史成功借款次数', y ='用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+summary(lc$历史成功借款次数)
+```
+为方便查看用户的历史成功借款次数，将x轴转为对数坐标，从上图中可以看出，绝大部分用户的借款次数小于10次。
+
+### 历史成功借款金额分布情况
+```{r echo=FALSE,warning=FALSE,fig.align='center'}
+ggplot(aes(x = 历史成功借款金额),data = lc) +
+  scale_x_log10() +
+  geom_histogram(binwidth = 0.1)
+
+summary(lc$历史成功借款金额)
+```
+从上图中可以看出，绝大部分用户的历史成功借款金额在1000-100000元之间。均值为8786元。  
+
+同样我们对历史成功借款金额进行分组，如下所示：  
+ (0,1000]  
+ (1000,10000]  
+ (10000,50000]  
+ (50000,100000]
+ (100000,8000000]  
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+lc$历史成功借款金额.bucket <- cut(lc$历史成功借款金额,c(0,1000,10000,50000,100000,8000000))
+
+ggplot(aes(历史成功借款金额.bucket),data = subset(lc,!is.na(历史成功借款金额.bucket))) +
+  geom_bar() +
+  labs(title = '历史成功借款金额分布图',x = '历史成功借款金额/元', y ='用户数量') +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+
+```
+从上图中可以看出，用户的历史成功借款金额主要集中在1000-50000元之间。
+
+## 单变量分析
+### 数据集结构
+现数据集lc中包含了328553个用户的借贷数据，25个变量。综合上述分析，我们选择了其中13 个变量进行分析，包括借款金额、借款期限、借款利率、初始评级、借款类型、年龄、性别、历史成功借款次数、历史成功借款金额、逾期比、借款金额.bucket、认证情况、历史成功借款金额.bucket，其中有6个数值变量，分别为：借款金额、借款利率、年龄、历史成功借款次数、历史成功借款金额、逾期比；其余均为分类变量。  
+针对以上单变量的可视化结果，总结如下：  
+
+- 大部分人的逾期比在0.25以下，整体均值为0.04，但也不乏有超过0.5的用户；
+- 借款金额主要集中在2000-5000元；
+- 绝大部分人选择半年或一年的还款周期；
+- 借款利率基本上都在20%及以上；
+- 用户的初始评级集中在C和D等级；
+- 借款用户中有3/4的都是老用户；
+- 用户年龄主要集中在21-34岁之间，男性占到了用户总量的2/3；
+- 用户的身份认证情况十分不好，只有少量的用户完成了超过2种项目的认证；
+- 绝大部分用户借款次数少于10次，他们的借款金额总量集中在1000-50000元之间。
+
+### 数据集中最主要的变量
+当然是‘逾期比’，因为该变量实现了对用户逾期行为的量化，通过我们对其他特征与逾期比的相关性分析，指出具有哪些特性的用户最容易出现逾期行为，从而指引企业更直观更具体地去评估和筛选借贷用户。
+
+### 你认为数据集内哪些其他特征可以帮助你探索兴趣特点？
+在`数据集结构`中选择的那些变量都是有可能与逾期比有一定相关关系的特征，我觉得借款金额与借款期限会是相关性比较高的两项，因为金额和期限直接决定了用户还款压力的大小以及还款周期的长短，从而对逾期行为产生影响。
+
+### 根据数据集内已有变量，创建了新变量
+- 逾期比：逾期还款次数占总还款次数的比    
+- 认证情况：将所有项的认证情况进行了整合，只关心认证数量  
+- 借款金额.bucket：对用户的借款金额进行了分组    
+- 历史成功借款金额.bucket：对用户的历史成功借款金额进行了分组  
+
+### 在已经探究的特性中，是否存在任何异常分布？你是否对数据进行一些操作，如清洁、调整或改变数据的形式？如果是，你为什么会这样做？
+在对用户借款金额，历史成功借款次数和历史成功借款金额的可视化中，将x轴变为了对数形式，这对于分布较为分散的变量可以看起来更集中一些，从而能更直观地得出结论；  
+
+在已探究的特性中，并没有发现异常值，不过有意思的是我在变量“历史成功借款次数”探究过程中，以为存在异常值649，但查看该行数据后，发现并不是异常值；同理，该用户的“历史成功借款金额”、“历史正常还款期数”和“历史逾期还款期数”均为正常值。
+
+## 双变量绘图选择
+
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+#删除数据集中不感兴趣的列
+lc$借款成功日期 <- NULL
+lc$是否首标 <- NULL
+lc$手机认证 <- NULL
+lc$户口认证 <- NULL
+lc$视频认证 <- NULL
+lc$学历认证 <- NULL
+lc$征信认证 <- NULL
+lc$淘宝认证 <- NULL
+lc$总待还本金 <- NULL
+lc$历史正常还款期数 <- NULL
+lc$历史逾期还款期数 <- NULL
+```
+### 拍拍贷各变量之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center', fig.height=20, fig.width=20, message=FALSE}
+#将认证情况数据类型改为factor
+lc$认证情况 <- factor(lc$认证情况)
+
+set.seed(1126)
+lc_samp <- lc[sample(1:length(lc$历史成功借款金额.bucket), 10000),]
+#删除无关列
+lc_samp$ListingId <-NULL
+#绘制概览
+ggpairs(lc_samp,title = '拍拍贷各变量关系图')
+```
+从上图中，我们并不能找出一对相关性较强的变量。  
+
+### 主要特性与其他特性之间的关系探究  
+
+### 逾期比与借款金额之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款金额,y = 逾期比),data = subset(lc,逾期比 >0)) +
+  scale_x_log10() +
+  geom_point(alpha = 1/20,position = 'jitter')
+
+cor.test(x = lc$借款金额,y = lc$逾期比)
+```
+从上图中可以看出，在借款金额较为集中的部分也是逾期比较高的部分，但二者几乎是毫不相关的。
+
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款金额.bucket,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_boxplot()
+
+by(subset(lc,逾期比 > 0)$逾期比,subset(lc,逾期比 > 0)$借款金额.bucket,summary)
+```
+从上图中可以看出，借款金额较低时，逾期比更为分散，且中位数也较高;就均值而言，借款金额达到8000以上的用户，逾期比也是最低的。
+
+### 逾期比与借款期限之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款期限,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  geom_point(alpha = 1/20,position = 'jitter') 
+
+cor.test(lc$借款期限,lc$逾期比)
+```
+从上图中可以看出，在借款期限为半年和一年的位置，借款人数最多，逾期比也相对较高。显然，二者相关性很低。
+
+### 逾期比与借款利率之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款利率,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_point(alpha = 1/20,position = 'jitter')
+
+cor.test(lc$借款利率,lc$逾期比)
+```
+从上图中可以看出，用户选择较多的借款利率中，逾期比也较高。显然，二者也几乎不相关。
+
+### 逾期比与初始评级之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 初始评级,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_boxplot()
+
+by(subset(lc,逾期比 > 0)$逾期比,subset(lc,逾期比 > 0)$初始评级,summary)
+```
+从上图中可以看出，随着用户评级越来越低（A至F），逾期比越来越分散，中位数也越来越高。就逾期比的均值而言，也是随用户评级降低而不断升高。
+
+### 逾期比与借款类型之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款类型,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_boxplot()
+
+by(subset(lc,逾期比 > 0)$逾期比,subset(lc,逾期比 > 0)$借款类型,summary)
+```
+从上图中可以看出，逾期比与借款类型之间并无明显关系。
+
+### 逾期比与年龄之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 年龄,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_point(alpha = 1/20,position = 'jitter')
+
+```
+从上图中可以看出，在用户较为集中的年龄段，逾期比也较高。
+
+### 逾期比与性别之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 性别,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+   geom_boxplot()
+```
+从上图中可以看出，逾期比与性别之间并无明显关系。
+
+### 逾期比与历史成功借款次数之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 历史成功借款次数,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  scale_x_log10() +
+  geom_point(alpha = 1/20,position = 'jitter')
+
+cor.test(subset(lc,逾期比 > 0)$历史成功借款次数,subset(lc,逾期比 > 0)$逾期比)
+```
+从上图中可以看出，历史成功借款次数越多，逾期比也就相对越低，二者有较低的负相关性。
+
+### 逾期比与历史成功借款金额之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'} 
+ggplot(aes(x = 历史成功借款金额,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  scale_x_log10() +
+  geom_point(alpha = 1/20,position = 'jitter')
+```
+从上图中可以看出，在用户较为集中的区间，逾期比相对较高。
+
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 历史成功借款金额.bucket,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  geom_boxplot()
+```
+从上图中可以看出，历史成功借款金额越高，逾期比会越集中，且中位数也会越低。
+
+### 逾期比与认证情况之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 认证情况,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  geom_boxplot()
+```
+从上图中可以看出，用户认证的项目数量越多，逾期比越集中，逾期比高于0.5的用户也越来越少。
+
+### 其他特性之间的关系探究  
+
+### 用户中，不同性别的年龄构成如何？
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 性别,y = 年龄),data = lc) +
+  geom_boxplot()
+
+by(lc$年龄,lc$性别,summary)
+```
+从上图中可以看出，用户中男女的年龄构成基本一致。
+
+### 借款期限与借款利率之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款期限,y = 借款利率),data = lc) +
+  geom_point(alpha = 1/20,position = 'jitter') +
+  geom_smooth(stat = 'summary',fun.y = 'mean')
+```
+从上图中可以看出，在借款期限低于5个月时的借款利率相对较高；借款期限在5-12个月之间时，借款利率相对较低。  
+
+### 不同性别的用户在借款选择上有什么异同？
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 性别,y = 借款金额),data = subset(lc,借款金额 < 20000)) +
+  geom_boxplot()
+by(lc$借款金额,lc$性别,summary)
+```
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 性别,y = 借款期限),data = lc) +
+  geom_boxplot()
+by(lc$借款期限,lc$性别,summary)
+
+```
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 性别,y = 借款利率),data = lc) +
+  geom_boxplot()
+by(lc$借款利率,lc$性别,summary)
+```
+从以上三幅图中可以看出，不同性别的用户在选择借款金额、期限及利率上，几乎没什么区别。  
+
+## 双变量分析
+
+### 主要特性与其他特性之间的关系：
+在本节中，我们主要查看了逾期比与各变量之间的关系，总结如下：  
+- 对于借款期限、借款利率、年龄来说，用户集中的区间，逾期比较高；
+- 对于借款金额和历史成功借款金额来说，金额相对越高，逾期比就会相对越低；
+- 用户的初始评级越低，逾期比就会越分散，中位数也会越高；
+- 用户的历史成功借款次数越高，逾期比就会越低；
+- 用户的认证项目数量越高，逾期比就会越集中，高于0.5的用户也会越少。
+
+### 其他特性之间的关系：  
+- 借款期限低于5个月时的借款利率相对较高；借款期限在5-12个月之间时，借款利率相对较低；  
+- 不同性别的用户在年龄、借款金额、期限及利率上，几乎没什么区别。
+
+### 你发现最强的关系是什么？
+并没有发现强相关性的变量。
+
+
+## 多变量绘图选择
+
+### 借款金额-初始评级与逾期比之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款金额, y = 逾期比,color = 初始评级),data = lc) + 
+  scale_x_log10() +
+  geom_point() +
+  scale_color_brewer(type = 'div')
+```
+从上图中可以看出，初始评级较高的用户主要集中在图示中的右下角，他们的借款金额较高，逾期比较低；而初始评级较低的用户主要集中在图示的中央位置，借款金额较低且集中，逾期比也较高。
+
+### 历史成功借款次数-历史成功借款金额与逾期比之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 历史成功借款次数, y = 逾期比,color = 历史成功借款金额.bucket),
+       data = subset(lc,!is.na(历史成功借款金额.bucket))) + 
+  scale_x_log10() +
+  geom_point() +
+  scale_color_brewer(palette = 'Accent')
+```
+从上图中可以看出，历史成功借款金额较高的用户借款次数也较多，逾期比较低；而历史成功借款金额较低的用户借款次数较少，且逾期比较高。
+
+### 借款金额-认证情况与逾期比之间的关系 
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款金额, y = 逾期比,color = 认证情况),data = lc) + 
+  scale_x_log10() +
+  geom_point() +
+  scale_color_brewer(palette = 'Paired')
+```
+从上图中可以看出，认证数量较多的用户，在图中的位置偏右偏下，他们的借款金额更高，逾期比更低；而认证数量较少的用户，在图中的位置偏左偏上，他们的借款金额相对较低，逾期比也相对较高。
+
+### 历史成功借款次数-历史成功借款金额-认证情况与逾期比之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 历史成功借款次数, y = 逾期比,color = 历史成功借款金额.bucket),
+       data = subset(lc,!is.na(历史成功借款金额.bucket))) + 
+  scale_x_log10() +
+  geom_point() +
+  facet_wrap(~认证情况) +
+  scale_color_brewer(palette = 'Accent')
+```
+从上图中可以看出，随着认证数量的增加，历史成功借款金额较低的用户逐渐减少，金额较高的用户逐渐增多，整体的逾期比也逐渐降低。
+
+### 借款期限-借款金额与借款利率之间的关系
+```{r echo=FALSE,warning=FALSE,fig.align = 'center'}
+ggplot(aes(x = 借款期限,y = 借款利率,color = 借款金额.bucket),data = lc) +
+  geom_point(alpha = 1/20,position = 'jitter') +
+  geom_smooth(stat = 'summary',fun.y = 'mean')
+```
+从上图中可以看出，借款金额较低的用户，选择的借款期限也较短，但是借款利率较高；而借款金额较高的用户，借款期限也较长，借款利率也较低。
+
+## 多变量分析
+
+###  探讨你在这部分探究中观察到的一些关系。通过观察感兴趣的特性，是否存在相互促进的特性？  
+
+对于主要观察变量“逾期比”来说，用户的认证项目数量越多、初始评级越高、历史成功借款金额越高、历史成功借款次数越多，那么出现逾期的比例就会越小。
+
+### 这些特性之间是否存在有趣或惊人的联系呢？
+其他特性之间的相互关系：借款金额较低的用户，选择的借款期限也较短，但是借款利率较高；而借款金额较高的用户，借款期限也较长，借款利率也较低。
+
+### 选项：你是否创建过数据集的任何模型？讨论你模型的优缺点。
+因为主要观察变量“逾期比”与其他变量的相关性都很低，而且类别变量较多，所以并没有创建数据集模型。
+
+------
+
+# 定稿图与总结
+
+### 绘图一
+```{r echo=FALSE,warning=FALSE, Plot_One}
+ggplot(aes(x = 逾期比),data = subset(lc,!is.na(lc$逾期比))) +
+  ylim(0,3000) +
+  geom_histogram(binwidth = 0.01,color = I('white')) +
+  labs(title="逾期比分布直方图", x="逾期比", y="用户数量")+
+  theme(plot.title = element_text(hjust = 0.5,size = 18)) 
+```
+
+### 描述一
+从上图中可以看出，大部分人的逾期比在0.25以下，但是在0.33,0.5,0.67和1处均出现了尖峰值，这说明具有高逾期比的用户数量并不少，而这些用户才是我们应该着重去关注的。
+
+### 绘图二
+```{r echo=FALSE,warning=FALSE, Plot_Two}
+p1 <- ggplot(aes(x = 初始评级,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  geom_boxplot() + 
+  labs(title="初始评级与逾期比关系图", x="初始评级", y="逾期比")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+p2 <- ggplot(aes(x = 认证情况,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  geom_boxplot() + 
+  labs(title="认证情况与逾期比关系图", x="认证情况", y="逾期比")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+p3 <- ggplot(aes(x = 历史成功借款次数,y = 逾期比),data = subset(lc,逾期比 > 0)) +
+  scale_x_log10() +
+  geom_point(alpha = 1/20,position = 'jitter') + 
+  labs(title="历史成功借款次数与逾期比关系图", x="历史成功借款次数", y="逾期比")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1,p2,p3,ncol = 1,top = '逾期比与几个典型变量之间的关系图')
+```
+
+### 描述二
+从上图中可以看出：  
+
+- 随着用户评级越来越低（A至F），逾期比越来越分散，中位数也越来越高；具有0.75以上逾期比的用户主要集中在C和D评分；
+- 用户认证的项目数量越多，逾期比越集中，逾期比高于0.5的用户也越来越少；
+- 历史成功借款次数越多，逾期比也就相对越低。
+
+### 绘图三
+```{r echo=FALSE,warning=FALSE, Plot_Three}
+ggplot(aes(x = 历史成功借款次数, y = 逾期比,color = 历史成功借款金额.bucket),
+       data = subset(lc,!is.na(历史成功借款金额.bucket))) + 
+  scale_x_log10() +
+  geom_point() +
+  facet_wrap(~认证情况) +
+  scale_color_brewer(palette = 'Accent') + 
+  labs(title="历史成功借款次数-历史成功借款金额-认证情况与逾期比关系图",
+       x="历史成功借款次数", y="逾期比") +
+  theme(plot.title = element_text(hjust = 0.5,size = 18))
+```
+
+### 描述三  
+
+从上图中可以看出：随着认证数量的增加，历史成功借款金额较低的用户逐渐减少，金额较高的用户逐渐增多，整体的逾期比也逐渐降低；历史成功借款次数越高，历史成功借款金额也就越高，逾期比就会越低。
+
+------
+
+## 反思
+### 项目结论
+经过如上分析，我们在对借贷用户的筛选上有了决策：
+
+- 对于认证项目较多的用户，可以适当提高借款额度，降低利息；
+- 对于初始评级较高的用户，可以适当提高借款额度，降低利息；
+- 对于历史借款次数较多、借款金额较高的老用户，可以适当提高借款额度，降低利息或发放免息抵扣券；
+- 对于认证项目少于或等于2项，初始评级低于或等于C级的用户，可以适当降低借款额度，提高利息；
+- 对于新注册用户，多鼓励其进行身份认证，并适当降低利息或发放免息抵扣券，鼓励其借款。
+
+### 不足
+
+- 未对项目进行建模，研究不够深入，不能实现期望的“逾期比预测”功能；
+- 对于数据来说，并不能获取用户的月收入等信息，也是影响分析结果丰富性的原因之一。
+
+### 对未来工作的提议
+
+- 把复杂的数据整理交给python完成，在R中重点关注分析及可视化；
+- 先找出数据集中的关键变量，然后再按照单变量分析-双变量分析-多变量分析的步骤去抽丝拨茧，找出关键变量与其他特征之间的关系；
+- 不要为了可视化而可视化，要带着问题去做可视化。
+- 不仅要考虑结果分析的正确性，还要丰富文字描述以及可视化结果的展示，提高报告的阅读性。
+
+### 分析中所做的重要决定
+
+- 最重要的决定莫过于“逾期比”这个变量的创建，这决定了整篇报告的分析重点；
+- 其次是“认证情况”变量的创建，因为原数据集中有六项不同的身份认证情况，分析起来比较麻烦，而且这几个变量主次性不明显，说明的也都是一类问题，所以把他们整合起来是最合适的选择，化繁为简，找出了认证项目数量与逾期比之间的关系。

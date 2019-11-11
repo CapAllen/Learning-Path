@@ -28,7 +28,7 @@
 
 **描述**：利用Knowledge Based，Collaborative Filtering Based ，Content Based以及机器学习的方法对音乐软件Sparkify构造新老用户的推荐系统。
 
-**项目开源链接**：[Github]()
+**项目开源链接**：[Github](https://github.com/CapAllen/Learning-Path/tree/master/%E4%B8%BASparkify%E6%9E%84%E5%BB%BA%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F)
 
 ### 优化Starbucks营销策略
 
@@ -36,7 +36,7 @@
 
 **描述**：利用A/B-test及有监督学习模型优化Starbucks营销的增量回应率(IRR)与净营收增量(NIR)，IRR由0.0077提升至0.0228，NIR由-759.95提升至298.10；
 
-**项目开源链接**：[Github]()
+**项目开源链接**：[Github](https://github.com/CapAllen/Learning-Path/tree/master/%E4%B8%BAStarbucks%E4%BC%98%E5%8C%96%E8%90%A5%E9%94%80%E7%AD%96%E7%95%A5)
 
 ### 挖掘客户细分
 
@@ -44,7 +44,7 @@
 
 **描述**：利用Bertelsmann提供的德国人口普查数据与Arvato提供的客户数据，使用无监督学习方法去做市场细分，筛选潜在客户，并进行精准营销。
 
-**项目开源链接**：[Github]()
+**项目开源链接**：[Github](https://github.com/CapAllen/Learning-Path/tree/master/%E4%B8%BAArvato%E5%88%9B%E5%BB%BA%E5%AE%A2%E6%88%B7%E7%BB%86%E5%88%86)
 
 ### 图像分类器
 
